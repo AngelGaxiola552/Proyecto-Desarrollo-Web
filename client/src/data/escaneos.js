@@ -1,5 +1,4 @@
 // Datos de ejemplo (hardcodeados) para mostrar en las interfaces.
-// En la Entrega 3 vendrán de la API y la base de datos.
 
 export const TARGETS = [
   { id: 1, alias: 'Scanme oficial', host: 'scanme.nmap.org' },

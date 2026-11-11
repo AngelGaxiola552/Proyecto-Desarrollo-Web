@@ -1,6 +1,5 @@
 // Contexto de sesión SIMULADO.
 // Guarda en el estado de React la lista de usuarios y quién inició sesión.
-// Todo vive en memoria: si recargas la página se reinicia.
 import { createContext, useContext, useState } from 'react';
 import { USUARIOS_INICIALES } from '../data/usuarios';
 
