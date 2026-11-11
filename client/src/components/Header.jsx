@@ -17,8 +17,11 @@ export default function Header() {
         <Link className="navbar-brand" to="/">NetScope</Link>
 
         {usuario ? (
-          // Con sesión: nombre del usuario y botón para salir
+          // Con sesión: menú de pantallas, nombre del usuario y botón para salir
           <div className="d-flex align-items-center gap-3">
+            <Link className="nav-link text-white" to="/dashboard">Dashboard</Link>
+            <Link className="nav-link text-white" to="/escaneos/nuevo">Nuevo escaneo</Link>
+            <Link className="nav-link text-white" to="/escaneos">Historial</Link>
             <span className="text-white">Hola, {usuario.name}</span>
             <button className="btn btn-outline-light btn-sm" onClick={cerrarSesion}>
               Cerrar sesión
