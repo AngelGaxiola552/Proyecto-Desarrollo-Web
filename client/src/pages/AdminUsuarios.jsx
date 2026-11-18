@@ -1,18 +1,15 @@
 // Pantalla 11: Administración de usuarios. Solo accesible para administradores.
 // Tabla con todos los usuarios; modal de crear/editar usuario; modal de borrado.
+// La lista de usuarios viene del AuthContext y se persiste en localStorage.
 import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Modal from '../components/Modal';
-import { USUARIOS_INICIALES } from '../data/usuarios';
 
 const USUARIO_VACIO = { id: null, name: '', email: '', password: '', role: 'user' };
 
 export default function AdminUsuarios() {
-  const { usuario } = useAuth();
-
-  // Lista local (en la entrega final vendría del servidor)
-  const [usuarios, setUsuarios] = useState(USUARIOS_INICIALES);
+  const { usuario, usuarios, setUsuarios } = useAuth();
   const [editando, setEditando] = useState(null);  // null = modal cerrado
   const [borrando, setBorrando] = useState(null);  // null = modal cerrado
   const [errores, setErrores] = useState({});
