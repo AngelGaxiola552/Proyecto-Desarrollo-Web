@@ -22,6 +22,9 @@ export default function Header() {
             <Link className="nav-link text-white" to="/dashboard">Dashboard</Link>
             <Link className="nav-link text-white" to="/escaneos/nuevo">Nuevo escaneo</Link>
             <Link className="nav-link text-white" to="/escaneos">Historial</Link>
+            <Link className="nav-link text-white" to="/actividad">Actividad</Link>
+            <Link className="nav-link text-white" to="/perfil">Perfil</Link>
+            {usuario.role === 'admin' && (<Link className="nav-link text-white" to="/admin/usuarios">Admin</Link>)}
             <span className="text-white">Hola, {usuario.name}</span>
             <button className="btn btn-outline-light btn-sm" onClick={cerrarSesion}>
               Cerrar sesión
