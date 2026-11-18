@@ -8,6 +8,9 @@ import Dashboard from './pages/Dashboard';
 import NuevoEscaneo from './pages/NuevoEscaneo';
 import Historial from './pages/Historial';
 import DetalleEscaneo from './pages/DetalleEscaneo';
+import Perfil from './pages/Perfil';
+import Actividad from './pages/Actividad';
+import AdminUsuarios from './pages/AdminUsuarios';
 
 export default function App() {
   return (
@@ -22,6 +25,9 @@ export default function App() {
           <Route path="/escaneos/nuevo" element={<NuevoEscaneo />} />
           <Route path="/escaneos" element={<Historial />} />
           <Route path="/escaneos/:id" element={<DetalleEscaneo />} />
+          <Route path="/perfil" element={<Perfil />} />
+          <Route path="/actividad" element={<Actividad />} />
+          <Route path="/admin/usuarios" element={<AdminUsuarios />} />
           <Route path="*" element={<p>Página no encontrada.</p>} />
         </Routes>
       </main>
