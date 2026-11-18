@@ -1,16 +1,40 @@
 // Contexto de sesión SIMULADO.
 // Guarda en el estado de React la lista de usuarios y quién inició sesión.
+// La lista de usuarios se persiste en localStorage para que los cambios del admin (18/Nov/2026)
+// (crear, editar, borrar) sobrevivan recargas y reinicios del dev server.
 import { createContext, useContext, useState } from 'react';
 import { USUARIOS_INICIALES } from '../data/usuarios';
 
 const AuthContext = createContext(null);
+const LS_KEY = 'netscope_usuarios';
 
 // Simula el tiempo que tardaría el servidor en responder
 const esperar = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Carga la lista desde localStorage; si no existe usa los datos iniciales del archivo.
+function cargarUsuarios() {
+  try {
+    const guardados = localStorage.getItem(LS_KEY);
+    if (guardados) return JSON.parse(guardados);
+  } catch {
+    // JSON corrupto: ignorar y usar los iniciales
+  }
+  return USUARIOS_INICIALES;
+}
+
 export function AuthProvider({ children }) {
-  const [usuarios, setUsuarios] = useState(USUARIOS_INICIALES);
+  const [usuarios, setUsuariosState] = useState(cargarUsuarios);
   const [usuario, setUsuario] = useState(null); // null = nadie ha iniciado sesión
+
+  // Wrapper que persiste en localStorage cada vez que se modifica la lista
+  function setUsuarios(nuevaLista) {
+    setUsuariosState(nuevaLista);
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify(nuevaLista));
+    } catch {
+      // localStorage lleno o no disponible: ignorar
+    }
+  }
 
   async function login(email, password) {
     await esperar(800);
@@ -39,7 +63,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ usuario, login, registrar, logout }}>
+    <AuthContext.Provider value={{ usuario, usuarios, setUsuarios, login, registrar, logout }}>
       {children}
     </AuthContext.Provider>
   );
