@@ -1,143 +1,175 @@
-// Pantalla 10: Actividad.
-// Registro de eventos del sistema (propios para usuarios; todos para administradores).
-// Modal de detalle de evento.
-import { useState } from 'react';
+// Pantalla 10: Actividad (bitácora de solo lectura).
+// GET /api/activity con filtros (tipo de acción, usuario para admin, fechas) y paginado.
+// El usuario normal ve sus eventos; el admin ve los de todos. Modal de detalle de evento.
+import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useMensaje } from '../context/MensajeContext';
+import { api, query } from '../api';
 import Modal from '../components/Modal';
+import Loader from '../components/Loader';
+import Paginacion from '../components/Paginacion';
+import { fecha } from '../utils/formato';
 
-// Datos de ejemplo para la interfaz
-const EVENTOS = [
-  { id: 1, tipo: 'Escaneo iniciado',   descripcion: 'Se inició el escaneo "Escaneo inicial scanme".',     usuario: 'Ángel Gaxiola',    fecha: '03/11/2026 12:00', ip: '192.168.1.100', meta: { escaneoId: 1 } },
-  { id: 2, tipo: 'Escaneo completado', descripcion: 'El escaneo "Escaneo inicial scanme" finalizó.',       usuario: 'Ángel Gaxiola',    fecha: '03/11/2026 12:01', ip: '192.168.1.100', meta: { escaneoId: 1, duracion: '1 min 52 s' } },
-  { id: 3, tipo: 'Inicio de sesión',   descripcion: 'Inicio de sesión exitoso.',                           usuario: 'Abraham Hernández', fecha: '04/11/2026 09:30', ip: '10.0.0.5',     meta: {} },
-  { id: 4, tipo: 'Escaneo iniciado',   descripcion: 'Se inició el escaneo "Web contenedor".',              usuario: 'Abraham Hernández', fecha: '04/11/2026 11:58', ip: '10.0.0.5',     meta: { escaneoId: 2 } },
-  { id: 5, tipo: 'Cierre de sesión',   descripcion: 'El usuario cerró sesión.',                            usuario: 'Ángel Gaxiola',    fecha: '04/11/2026 13:00', ip: '192.168.1.100', meta: {} },
-  { id: 6, tipo: 'Registro',           descripcion: 'Nuevo usuario registrado.',                           usuario: 'Abraham Hernández', fecha: '01/11/2026 08:00', ip: '10.0.0.5',     meta: {} },
-];
-
-const COLOR_TIPO = {
-  'Escaneo iniciado':   'info',
-  'Escaneo completado': 'success',
-  'Inicio de sesión':   'primary',
-  'Cierre de sesión':   'secondary',
-  'Registro':           'warning',
+// Nombre legible para cada acción que registra el backend
+const ACCIONES = {
+  'user.register': 'Registro',
+  'user.login': 'Inicio de sesión',
+  'user.logout': 'Cierre de sesión',
+  'user.update': 'Perfil actualizado',
+  'user.deleted': 'Cuenta eliminada',
+  'admin.user.create': 'Admin creó usuario',
+  'admin.user.update': 'Admin editó usuario',
+  'admin.user.delete': 'Admin borró usuario',
+  'target.create': 'Target creado',
+  'target.update': 'Target editado',
+  'target.delete': 'Target borrado',
+  'profile.create': 'Perfil creado',
+  'profile.update': 'Perfil editado',
+  'profile.delete': 'Perfil borrado',
+  'scan.start': 'Escaneo iniciado',
+  'scan.completed': 'Escaneo completado',
+  'scan.failed': 'Escaneo fallido',
+  'scan.cancel': 'Escaneo cancelado',
+  'scan.timeout': 'Escaneo excedió el tiempo',
+  'scan.update': 'Escaneo editado',
+  'scan.delete': 'Escaneo borrado',
 };
+
+// Color del badge según el tipo de entidad
+function colorAccion(accion) {
+  if (accion.startsWith('scan')) return 'info';
+  if (accion.startsWith('target')) return 'success';
+  if (accion.startsWith('profile')) return 'warning';
+  if (accion.startsWith('admin')) return 'dark';
+  return 'primary';
+}
 
 export default function Actividad() {
   const { usuario } = useAuth();
+  const { mostrarMensaje } = useMensaje();
+  const esAdmin = usuario?.role === 'admin';
+
+  const [filtros, setFiltros] = useState({ action: '', userId: '', from: '', to: '', page: 1 });
+  const [resultado, setResultado] = useState({ items: [], total: 0, page: 1, pages: 1 });
+  const [usuarios, setUsuarios] = useState([]); // solo para el admin: mostrar nombres en vez de ids
+  const [cargando, setCargando] = useState(true);
   const [detalleEvento, setDetalleEvento] = useState(null);
+
+  useEffect(() => {
+    if (esAdmin) api('/users?limit=50').then((d) => setUsuarios(d.items)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!usuario) return;
+    setCargando(true);
+    const conHoras = {
+      ...filtros,
+      from: filtros.from && filtros.from + 'T00:00:00',
+      to: filtros.to && filtros.to + 'T23:59:59',
+    };
+    api('/activity' + query(conHoras))
+      .then(setResultado)
+      .catch((err) => mostrarMensaje('error', err.message))
+      .finally(() => setCargando(false));
+  }, [filtros]);
 
   if (!usuario) return <Navigate to="/login" replace />;
 
-  // Los usuarios solo ven sus propios eventos; los admins ven todos
-  const eventos = usuario.role === 'admin'
-    ? EVENTOS
-    : EVENTOS.filter((e) => e.usuario === usuario.name);
+  const cambiarFiltro = (campo, valor) => setFiltros({ ...filtros, [campo]: valor, page: 1 });
+  const nombreUsuario = (id) => usuarios.find((u) => u.id === id)?.name || (id === usuario.id ? usuario.name : id);
 
   return (
     <div>
       <div className="d-flex justify-content-between align-items-center mb-4">
         <h2>Actividad</h2>
-        {usuario.role === 'admin' && (
-          <span className="badge bg-dark">Vista administrador — todos los usuarios</span>
-        )}
+        {esAdmin && <span className="badge bg-dark">Vista administrador — todos los usuarios</span>}
       </div>
 
       {/* Filtros */}
       <div className="row g-2 mb-3">
         <div className="col-md-3">
-          <select className="form-select">
-            <option>Todos los tipos</option>
-            {Object.keys(COLOR_TIPO).map((t) => <option key={t}>{t}</option>)}
+          <select className="form-select" value={filtros.action} onChange={(e) => cambiarFiltro('action', e.target.value)}>
+            <option value="">Todas las acciones</option>
+            <option value="user">Sesión y cuenta</option>
+            <option value="scan">Escaneos</option>
+            <option value="target">Targets</option>
+            <option value="profile">Perfiles</option>
+            {esAdmin && <option value="admin">Administración</option>}
           </select>
         </div>
-        {usuario.role === 'admin' && (
+        {esAdmin && (
           <div className="col-md-3">
-            <select className="form-select">
-              <option>Todos los usuarios</option>
-              <option>Ángel Gaxiola</option>
-              <option>Abraham Hernández</option>
+            <select className="form-select" value={filtros.userId} onChange={(e) => cambiarFiltro('userId', e.target.value)}>
+              <option value="">Todos los usuarios</option>
+              {usuarios.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
             </select>
           </div>
         )}
         <div className="col-md-3">
-          <input type="date" className="form-control" title="Desde" />
+          <div className="input-group">
+            <span className="input-group-text">Desde</span>
+            <input type="date" className="form-control" value={filtros.from} onChange={(e) => cambiarFiltro('from', e.target.value)} />
+          </div>
         </div>
         <div className="col-md-3">
-          <input type="date" className="form-control" title="Hasta" />
+          <div className="input-group">
+            <span className="input-group-text">Hasta</span>
+            <input type="date" className="form-control" value={filtros.to} onChange={(e) => cambiarFiltro('to', e.target.value)} />
+          </div>
         </div>
       </div>
 
       <div className="card">
-        <table className="table mb-0 align-middle">
-          <thead>
-            <tr>
-              <th>Tipo</th>
-              <th>Descripción</th>
-              {usuario.role === 'admin' && <th>Usuario</th>}
-              <th>Fecha</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {eventos.length === 0 && (
-              <tr><td colSpan="5" className="text-center text-muted py-4">Sin eventos registrados.</td></tr>
-            )}
-            {eventos.map((ev) => (
-              <tr key={ev.id}>
-                <td>
-                  <span className={`badge bg-${COLOR_TIPO[ev.tipo] ?? 'secondary'}`}>{ev.tipo}</span>
-                </td>
-                <td>{ev.descripcion}</td>
-                {usuario.role === 'admin' && <td>{ev.usuario}</td>}
-                <td className="text-nowrap">{ev.fecha}</td>
-                <td>
-                  <button
-                    className="btn btn-sm btn-outline-secondary"
-                    onClick={() => setDetalleEvento(ev)}
-                  >
-                    Detalle
-                  </button>
-                </td>
+        {cargando ? <Loader /> : (
+          <table className="table mb-0 align-middle">
+            <thead>
+              <tr>
+                <th>Acción</th>
+                <th>Entidad</th>
+                {esAdmin && <th>Usuario</th>}
+                <th>Fecha</th>
+                <th></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {resultado.items.length === 0 && (
+                <tr><td colSpan="5" className="text-center text-muted py-4">Sin eventos registrados.</td></tr>
+              )}
+              {resultado.items.map((ev) => (
+                <tr key={ev.id}>
+                  <td><span className={`badge bg-${colorAccion(ev.action)}`}>{ACCIONES[ev.action] || ev.action}</span></td>
+                  <td>{ev.entity}</td>
+                  {esAdmin && <td>{nombreUsuario(ev.userId)}</td>}
+                  <td className="text-nowrap">{fecha(ev.timestamp)}</td>
+                  <td>
+                    <button className="btn btn-sm btn-outline-secondary" onClick={() => setDetalleEvento(ev)}>
+                      Detalle
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
-
-      {/* Paginado (solo interfaz) */}
-      <div className="d-flex justify-content-between align-items-center mt-3">
-        <small className="text-muted">{eventos.length} eventos · página 1 de 1</small>
-        <ul className="pagination pagination-sm mb-0">
-          <li className="page-item disabled"><span className="page-link">Anterior</span></li>
-          <li className="page-item active"><span className="page-link">1</span></li>
-          <li className="page-item disabled"><span className="page-link">Siguiente</span></li>
-        </ul>
-      </div>
+      <Paginacion {...resultado} onCambiar={(p) => setFiltros({ ...filtros, page: p })} />
 
       {/* Modal: detalle de evento */}
       {detalleEvento && (
-        <Modal
-          titulo={`Evento #${detalleEvento.id} — ${detalleEvento.tipo}`}
-          onCerrar={() => setDetalleEvento(null)}
-        >
+        <Modal titulo={ACCIONES[detalleEvento.action] || detalleEvento.action} onCerrar={() => setDetalleEvento(null)}>
           <dl className="row mb-0">
-            <dt className="col-sm-4">Tipo</dt>
-            <dd className="col-sm-8">
-              <span className={`badge bg-${COLOR_TIPO[detalleEvento.tipo] ?? 'secondary'}`}>
-                {detalleEvento.tipo}
-              </span>
-            </dd>
-            <dt className="col-sm-4">Descripción</dt>
-            <dd className="col-sm-8">{detalleEvento.descripcion}</dd>
+            <dt className="col-sm-4">Acción</dt>
+            <dd className="col-sm-8"><code>{detalleEvento.action}</code></dd>
+            <dt className="col-sm-4">Entidad</dt>
+            <dd className="col-sm-8">{detalleEvento.entity} / {detalleEvento.entityId}</dd>
             <dt className="col-sm-4">Usuario</dt>
-            <dd className="col-sm-8">{detalleEvento.usuario}</dd>
+            <dd className="col-sm-8">{nombreUsuario(detalleEvento.userId)}</dd>
             <dt className="col-sm-4">Fecha</dt>
-            <dd className="col-sm-8">{detalleEvento.fecha}</dd>
+            <dd className="col-sm-8">{fecha(detalleEvento.timestamp)}</dd>
             <dt className="col-sm-4">IP origen</dt>
-            <dd className="col-sm-8"><code>{detalleEvento.ip}</code></dd>
-            {Object.keys(detalleEvento.meta).length > 0 && (
+            <dd className="col-sm-8"><code>{detalleEvento.ip || '—'}</code></dd>
+            {Object.keys(detalleEvento.meta || {}).length > 0 && (
               <>
                 <dt className="col-sm-4">Metadatos</dt>
                 <dd className="col-sm-8">

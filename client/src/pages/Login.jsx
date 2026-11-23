@@ -4,9 +4,11 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useMensaje } from '../context/MensajeContext';
 
 export default function Login() {
   const { login } = useAuth();
+  const { mostrarMensaje } = useMensaje();
   const navigate = useNavigate();
 
   const [email, setEmail] = useState('');
@@ -34,6 +36,7 @@ export default function Login() {
     setCargando(true);
     try {
       await login(email, password);
+      mostrarMensaje('exito', 'Bienvenido');
       navigate('/dashboard');
     } catch (err) {
       setErrorServidor(err.message);

@@ -4,9 +4,11 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useMensaje } from '../context/MensajeContext';
 
 export default function Registro() {
   const { registrar } = useAuth();
+  const { mostrarMensaje } = useMensaje();
   const navigate = useNavigate();
 
   // Un solo objeto con todos los campos del formulario
@@ -44,6 +46,7 @@ export default function Registro() {
     setCargando(true);
     try {
       await registrar(form);
+      mostrarMensaje('exito', 'Cuenta creada correctamente');
       navigate('/dashboard');
     } catch (err) {
       setErrorServidor(err.message);

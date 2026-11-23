@@ -6,15 +6,19 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 import './index.css';
 import App from './App';
 import { AuthProvider } from './context/AuthContext';
+import { MensajeProvider } from './context/MensajeContext';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     {/* BrowserRouter permite cambiar de pantalla sin recargar la página */}
     <BrowserRouter>
-      {/* AuthProvider comparte el usuario logueado con toda la app */}
-      <AuthProvider>
-        <App />
-      </AuthProvider>
+      {/* MensajeProvider muestra avisos de éxito/error en cualquier pantalla */}
+      <MensajeProvider>
+        {/* AuthProvider comparte el usuario logueado con toda la app */}
+        <AuthProvider>
+          <App />
+        </AuthProvider>
+      </MensajeProvider>
     </BrowserRouter>
   </React.StrictMode>
 );

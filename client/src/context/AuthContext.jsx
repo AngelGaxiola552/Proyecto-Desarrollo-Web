@@ -1,69 +1,40 @@
-// Contexto de sesión SIMULADO.
-// Guarda en el estado de React la lista de usuarios y quién inició sesión.
-// La lista de usuarios se persiste en localStorage para que los cambios del admin (18/Nov/2026)
-// (crear, editar, borrar) sobrevivan recargas y reinicios del dev server.
-import { createContext, useContext, useState } from 'react';
-import { USUARIOS_INICIALES } from '../data/usuarios';
+// Contexto de sesión: guarda quién inició sesión y habla con el backend.
+// El servidor guarda la sesión en una cookie (JWT); aquí solo guardamos los datos del usuario.
+import { createContext, useContext, useEffect, useState } from 'react';
+import { api } from '../api';
 
 const AuthContext = createContext(null);
-const LS_KEY = 'netscope_usuarios';
-
-// Simula el tiempo que tardaría el servidor en responder
-const esperar = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-// Carga la lista desde localStorage; si no existe usa los datos iniciales del archivo.
-function cargarUsuarios() {
-  try {
-    const guardados = localStorage.getItem(LS_KEY);
-    if (guardados) return JSON.parse(guardados);
-  } catch {
-    // JSON corrupto: ignorar y usar los iniciales
-  }
-  return USUARIOS_INICIALES;
-}
 
 export function AuthProvider({ children }) {
-  const [usuarios, setUsuariosState] = useState(cargarUsuarios);
   const [usuario, setUsuario] = useState(null); // null = nadie ha iniciado sesión
+  const [revisando, setRevisando] = useState(true); // true mientras preguntamos si ya había sesión
 
-  // Wrapper que persiste en localStorage cada vez que se modifica la lista
-  function setUsuarios(nuevaLista) {
-    setUsuariosState(nuevaLista);
-    try {
-      localStorage.setItem(LS_KEY, JSON.stringify(nuevaLista));
-    } catch {
-      // localStorage lleno o no disponible: ignorar
-    }
-  }
+  // Al abrir la página preguntamos al servidor si la cookie sigue siendo válida
+  useEffect(() => {
+    api('/users/me')
+      .then((datos) => setUsuario(datos))
+      .catch(() => setUsuario(null)) // 401: no hay sesión
+      .finally(() => setRevisando(false));
+  }, []);
 
   async function login(email, password) {
-    await esperar(800);
-    const encontrado = usuarios.find(
-      (u) => u.email === email.trim().toLowerCase() && u.password === password
-    );
-    if (!encontrado) {
-      throw new Error('Correo o contraseña incorrectos');
-    }
-    setUsuario(encontrado);
+    const datos = await api('/auth/login', { method: 'POST', body: { email, password } });
+    setUsuario(datos);
   }
 
   async function registrar({ name, email, password }) {
-    await esperar(800);
-    const correo = email.trim().toLowerCase();
-    if (usuarios.some((u) => u.email === correo)) {
-      throw new Error('Ese correo ya está registrado');
-    }
-    const nuevo = { id: Date.now(), name: name.trim(), email: correo, password, role: 'user' };
-    setUsuarios([...usuarios, nuevo]);
-    setUsuario(nuevo); // al registrarse queda con la sesión iniciada
+    const datos = await api('/auth/register', { method: 'POST', body: { name, email, password } });
+    setUsuario(datos); // al registrarse queda con la sesión iniciada
   }
 
-  function logout() {
+  async function logout() {
+    await api('/auth/logout', { method: 'POST' });
     setUsuario(null);
   }
 
+  // setUsuario se comparte para que Perfil pueda actualizar el header sin recargar
   return (
-    <AuthContext.Provider value={{ usuario, usuarios, setUsuarios, login, registrar, logout }}>
+    <AuthContext.Provider value={{ usuario, setUsuario, revisando, login, registrar, logout }}>
       {children}
     </AuthContext.Provider>
   );

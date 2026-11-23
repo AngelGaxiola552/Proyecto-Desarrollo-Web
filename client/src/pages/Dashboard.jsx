@@ -1,20 +1,51 @@
 // Pantalla 4: Dashboard.
-// Conteos, escaneos recientes y modal de "detalle rápido" del último escaneo.
-import { useState } from 'react';
+// Conteos con GET /api/stats, últimos escaneos con GET /api/scans
+// y modal de "detalle rápido" del último escaneo.
+import { useEffect, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useMensaje } from '../context/MensajeContext';
+import { api } from '../api';
 import Modal from '../components/Modal';
-import { ESCANEOS, PUERTOS, COLOR_ESTADO } from '../data/escaneos';
+import Loader from '../components/Loader';
+import { ESTADOS, fecha, duracion } from '../utils/formato';
+import { leerPuertos } from '../utils/nmapXml';
 
 export default function Dashboard() {
   const { usuario } = useAuth();
+  const { mostrarMensaje } = useMensaje();
+  const [stats, setStats] = useState(null);
+  const [recientes, setRecientes] = useState([]);
+  const [cargando, setCargando] = useState(true);
   const [mostrarDetalle, setMostrarDetalle] = useState(false);
+
+  useEffect(() => {
+    if (!usuario) return;
+    // Pedimos las dos cosas al mismo tiempo y esperamos a que terminen ambas
+    Promise.all([api('/stats'), api('/scans?limit=5')])
+      .then(([datosStats, datosEscaneos]) => {
+        setStats(datosStats);
+        setRecientes(datosEscaneos.items);
+      })
+      .catch((err) => mostrarMensaje('error', err.message))
+      .finally(() => setCargando(false));
+  }, []);
 
   // Si no hay sesión, se regresa al login
   if (!usuario) return <Navigate to="/login" replace />;
+  if (cargando) return <Loader texto="Cargando tu panel..." />;
 
-  const ultimo = ESCANEOS[0];
-  const abiertos = PUERTOS.filter((p) => p.state === 'open');
+  const ultimo = recientes[0];
+  const abiertos = leerPuertos(ultimo?.result?.raw).filter((p) => p.state === 'open');
+
+  const tarjetas = [
+    ['Escaneos', stats?.totalScans],
+    ['En curso', stats?.runningScans],
+    ['Completados', stats?.completedScans],
+    ['Fallidos', stats?.failedScans],
+    ['Targets', stats?.totalTargets],
+    ['Perfiles', stats?.totalProfiles],
+  ];
 
   return (
     <div>
@@ -23,12 +54,14 @@ export default function Dashboard() {
         <Link className="btn btn-primary" to="/escaneos/nuevo">Nuevo escaneo</Link>
       </div>
 
-      {/* Conteos (datos de ejemplo) */}
       <div className="row g-3 mb-4">
-        <div className="col-6 col-md-3"><div className="card text-center"><div className="card-body"><h3>5</h3><small>Escaneos</small></div></div></div>
-        <div className="col-6 col-md-3"><div className="card text-center"><div className="card-body"><h3>1</h3><small>En curso</small></div></div></div>
-        <div className="col-6 col-md-3"><div className="card text-center"><div className="card-body"><h3>3</h3><small>Targets</small></div></div></div>
-        <div className="col-6 col-md-3"><div className="card text-center"><div className="card-body"><h3>3</h3><small>Perfiles</small></div></div></div>
+        {tarjetas.map(([titulo, valor]) => (
+          <div className="col-6 col-md-2" key={titulo}>
+            <div className="card text-center"><div className="card-body">
+              <h3>{valor ?? 0}</h3><small>{titulo}</small>
+            </div></div>
+          </div>
+        ))}
       </div>
 
       <div className="row g-4">
@@ -43,31 +76,36 @@ export default function Dashboard() {
                 <tr><th>Nombre</th><th>Host</th><th>Estado</th><th>Fecha</th></tr>
               </thead>
               <tbody>
-                {ESCANEOS.map((e) => (
+                {recientes.map((e) => (
                   <tr key={e.id}>
                     <td><Link to={`/escaneos/${e.id}`}>{e.name}</Link></td>
-                    <td>{e.host}</td>
-                    <td><span className={`badge bg-${COLOR_ESTADO[e.status]}`}>{e.status}</span></td>
-                    <td>{e.fecha}</td>
+                    <td>{e.hostSnapshot}</td>
+                    <td><span className={`badge bg-${ESTADOS[e.status].color}`}>{ESTADOS[e.status].texto}</span></td>
+                    <td>{fecha(e.startedAt)}</td>
                   </tr>
                 ))}
+                {recientes.length === 0 && (
+                  <tr><td colSpan="4" className="text-center text-muted py-4">Aún no tienes escaneos.</td></tr>
+                )}
               </tbody>
             </table>
           </div>
         </div>
 
         <div className="col-lg-4">
-          <div className="card">
-            <div className="card-body">
-              <small className="text-muted">Último escaneo</small>
-              <h5>{ultimo.name}</h5>
-              <p className="mb-1">{ultimo.host}</p>
-              <p><strong>{abiertos.length}</strong> puertos abiertos</p>
-              <button className="btn btn-outline-primary btn-sm" onClick={() => setMostrarDetalle(true)}>
-                Detalle rápido
-              </button>
+          {ultimo && (
+            <div className="card">
+              <div className="card-body">
+                <small className="text-muted">Último escaneo</small>
+                <h5>{ultimo.name}</h5>
+                <p className="mb-1">{ultimo.hostSnapshot}</p>
+                <p><strong>{abiertos.length}</strong> puertos abiertos</p>
+                <button className="btn btn-outline-primary btn-sm" onClick={() => setMostrarDetalle(true)}>
+                  Detalle rápido
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -82,19 +120,23 @@ export default function Dashboard() {
             </>
           }
         >
-          <p>Host: {ultimo.host} · Duración: {ultimo.duracion}</p>
-          <table className="table table-sm">
-            <thead><tr><th>Puerto</th><th>Servicio</th><th>Versión</th></tr></thead>
-            <tbody>
-              {abiertos.map((p) => (
-                <tr key={p.port}>
-                  <td>{p.port}/{p.protocol}</td>
-                  <td>{p.service}</td>
-                  <td>{p.product} {p.version}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <p>Host: {ultimo.hostSnapshot} · Estado: {ESTADOS[ultimo.status].texto} · Duración: {duracion(ultimo.durationMs)}</p>
+          {abiertos.length === 0 ? (
+            <p className="text-muted mb-0">Sin puertos abiertos registrados.</p>
+          ) : (
+            <table className="table table-sm">
+              <thead><tr><th>Puerto</th><th>Servicio</th><th>Versión</th></tr></thead>
+              <tbody>
+                {abiertos.map((p) => (
+                  <tr key={`${p.port}/${p.protocol}`}>
+                    <td>{p.port}/{p.protocol}</td>
+                    <td>{p.service}</td>
+                    <td>{p.product} {p.version}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </Modal>
       )}
     </div>
