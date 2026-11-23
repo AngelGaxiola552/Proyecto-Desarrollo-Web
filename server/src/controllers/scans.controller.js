@@ -104,9 +104,24 @@ function createScan(req, res, next) {
     proc.stdout.on('data', (chunk) => { xmlOutput += chunk.toString(); });
     proc.stderr.on('data', (chunk) => { errorOutput += chunk.toString(); });
 
+    // Si nmap no se pudo ejecutar (por ejemplo, no está instalado), marcamos el escaneo
+    // como fallido. Sin este manejador, Node lanza el error y el servidor completo se cae.
+    proc.on('error', (err) => {
+      clearTimeout(timer);
+      activeProcesses.delete(scan.id);
+      if (scan.status !== 'running') return;
+      scan.status     = 'failed';
+      scan.finishedAt = new Date();
+      scan.durationMs = Date.now() - scan.startedAt.getTime();
+      scan.result     = { error: err.code === 'ENOENT' ? 'Nmap no está instalado en el servidor' : err.message };
+      log({ userId: scan.userId, action: 'scan.failed', entity: 'scans', entityId: scan.id, meta: { error: scan.result.error }, ip: '' });
+    });
+
     proc.on('close', (code) => {
       clearTimeout(timer);
       activeProcesses.delete(scan.id);
+      // Si ya se canceló, se marcó por tiempo excedido o falló al iniciar, no sobrescribimos su estado
+      if (scan.status !== 'running') return;
       scan.finishedAt = new Date();
       scan.durationMs = Date.now() - scan.startedAt.getTime();
 
